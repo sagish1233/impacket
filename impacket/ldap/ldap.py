@@ -26,6 +26,7 @@ import socket
 from binascii import unhexlify
 import random
 
+import six
 from pyasn1.codec.ber import encoder, decoder
 from pyasn1.error import SubstrateUnderrunError
 from pyasn1.type.univ import noValue
@@ -121,8 +122,14 @@ class LDAPConnection:
             self._socket.connect(sa)
             self._socket.do_handshake()
 
+    def getCertificateFingerPrint(self):
+        thumbprint = self._socket.get_peer_certificate().digest("SHA256")
+        if six.PY3:
+            thumbprint = thumbprint.decode()
+        return thumbprint.replace(":", "")
+
     def kerberosLogin(self, user, password, domain='', lmhash='', nthash='', aesKey='', kdcHost=None, TGT=None,
-                      TGS=None, useCache=True):
+                      TGS=None, useCache=True, includeChecksum=True):
         """
         logins into the target system explicitly using Kerberos. Hashes are used if RC4_HMAC is supported.
 
@@ -157,6 +164,8 @@ class LDAPConnection:
         from impacket.krb5.kerberosv5 import getKerberosTGT, getKerberosTGS
         from impacket.krb5 import constants
         from impacket.krb5.types import Principal, KerberosTime, Ticket
+        from impacket.krb5.gssapi import GSS_C_REPLAY_FLAG, GSS_C_SEQUENCE_FLAG, CheckSumField, \
+            ZEROED_CHANNEL_BINDINGS, calc_channel_binding
         import datetime
 
         if TGT is not None or TGS is not None:
@@ -247,6 +256,21 @@ class LDAPConnection:
 
         authenticator['cusec'] = now.microsecond
         authenticator['ctime'] = KerberosTime.to_asn1(now)
+
+        if includeChecksum:
+            # Insert GSSAPI checksum
+            authenticator['cksum'] = noValue
+            authenticator['cksum']['cksumtype'] = 0x8003
+            chkField = CheckSumField()
+            chkField['Lgth'] = 16
+            chkField['Flags'] = GSS_C_SEQUENCE_FLAG | GSS_C_REPLAY_FLAG
+
+            if self._SSL:
+                chkField['Bnd'] = calc_channel_binding(self.getCertificateFingerPrint())
+            else:
+                chkField['Bnd'] = ZEROED_CHANNEL_BINDINGS
+
+            authenticator['cksum']['checksum'] = chkField.getData()
 
         encodedAuthenticator = encoder.encode(authenticator)
 

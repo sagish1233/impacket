@@ -3070,12 +3070,13 @@ class SMB(object):
                 (self._accepted_hostname.lower(), self.__server_name.lower(), self.__server_dns_host_name.lower()))
 
 
-    def kerberos_login(self, user, password, domain = '', lmhash = '', nthash = '', aesKey = '', kdcHost = '', TGT=None, TGS=None):
+    def kerberos_login(self, user, password, domain = '', lmhash = '', nthash = '', aesKey = '', kdcHost = '', TGT=None, TGS=None, includeChecksum=True):
         # Importing down here so pyasn1 is not required if kerberos is not used.
         from impacket.krb5.asn1 import AP_REQ, Authenticator, TGS_REP, seq_set
         from impacket.krb5.kerberosv5 import getKerberosTGT, getKerberosTGS
         from impacket.krb5 import constants
         from impacket.krb5.types import Principal, KerberosTime, Ticket
+        from impacket.krb5.gssapi import ZEROED_CHANNEL_BINDINGS, CheckSumField
         from pyasn1.codec.der import decoder, encoder
         import datetime
 
@@ -3180,6 +3181,16 @@ class SMB(object):
 
         authenticator['cusec'] = now.microsecond
         authenticator['ctime'] = KerberosTime.to_asn1(now)
+
+        if includeChecksum:
+            # Insert GSSAPI checksum
+            authenticator['cksum'] = noValue
+            authenticator['cksum']['cksumtype'] = 0x8003
+            chkField = CheckSumField()
+            chkField['Lgth'] = 16
+            chkField['Flags'] = 0
+            chkField['Bnd'] = ZEROED_CHANNEL_BINDINGS
+            authenticator['cksum']['checksum'] = chkField.getData()
 
         encodedAuthenticator = encoder.encode(authenticator)
 

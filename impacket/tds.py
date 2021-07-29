@@ -647,7 +647,7 @@ class MSSQL:
         #print packet['Length']
         return packet
 
-    def kerberosLogin(self, database, username, password='', domain='', hashes=None, aesKey='', kdcHost=None, TGT=None, TGS=None, useCache=True):
+    def kerberosLogin(self, database, username, password='', domain='', hashes=None, aesKey='', kdcHost=None, TGT=None, TGS=None, useCache=True, includeChecksum=True):
 
         if hashes is not None:
             lmhash, nthash = hashes.split(':')
@@ -702,6 +702,7 @@ class MSSQL:
         from impacket.krb5.kerberosv5 import getKerberosTGT, getKerberosTGS, KerberosError
         from impacket.krb5 import constants
         from impacket.krb5.types import Principal, KerberosTime, Ticket
+        from impacket.krb5.gssapi import CheckSumField, ZEROED_CHANNEL_BINDINGS
         from pyasn1.codec.der import decoder, encoder
         from pyasn1.type.univ import noValue
         from impacket.krb5.ccache import CCache
@@ -858,6 +859,16 @@ class MSSQL:
 
         authenticator['cusec'] = now.microsecond
         authenticator['ctime'] = KerberosTime.to_asn1(now)
+
+        if includeChecksum:
+            # Insert GSSAPI checksum
+            authenticator['cksum'] = noValue
+            authenticator['cksum']['cksumtype'] = 0x8003
+            chkField = CheckSumField()
+            chkField['Lgth'] = 16
+            chkField['Flags'] = 0
+            chkField['Bnd'] = ZEROED_CHANNEL_BINDINGS
+            authenticator['cksum']['checksum'] = chkField.getData()
 
         encodedAuthenticator = encoder.encode(authenticator)
 

@@ -608,7 +608,7 @@ class SMB3:
             self.__TGT,
             self.__TGS)
 
-    def kerberosLogin(self, user, password, domain = '', lmhash = '', nthash = '', aesKey='', kdcHost = '', TGT=None, TGS=None, mutualAuth=False):
+    def kerberosLogin(self, user, password, domain = '', lmhash = '', nthash = '', aesKey='', kdcHost = '', TGT=None, TGS=None, mutualAuth=False, includeChecksum=True):
         # If TGT or TGS are specified, they are in the form of:
         # TGS['KDC_REP'] = the response from the server
         # TGS['cipher'] = the cipher used
@@ -648,6 +648,7 @@ class SMB3:
         from impacket.krb5.kerberosv5 import getKerberosTGT, getKerberosTGS
         from impacket.krb5 import constants
         from impacket.krb5.types import Principal, KerberosTime, Ticket
+        from impacket.krb5.gssapi import ZEROED_CHANNEL_BINDINGS, CheckSumField
         from pyasn1.codec.der import decoder, encoder
         import datetime
 
@@ -720,6 +721,16 @@ class SMB3:
 
         authenticator['cusec'] = now.microsecond
         authenticator['ctime'] = KerberosTime.to_asn1(now)
+
+        if includeChecksum:
+            # Insert GSSAPI checksum
+            authenticator['cksum'] = noValue
+            authenticator['cksum']['cksumtype'] = 0x8003
+            chkField = CheckSumField()
+            chkField['Lgth'] = 16
+            chkField['Flags'] = 0
+            chkField['Bnd'] = ZEROED_CHANNEL_BINDINGS
+            authenticator['cksum']['checksum'] = chkField.getData()
 
         encodedAuthenticator = encoder.encode(authenticator)
 

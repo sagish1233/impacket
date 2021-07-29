@@ -18,6 +18,8 @@
 import struct
 import random
 import string
+import hashlib
+import six
 from six import b
 
 from Cryptodome.Hash import HMAC, MD5
@@ -54,6 +56,19 @@ KG_USAGE_INITIATOR_SEAL = 24
 KG_USAGE_INITIATOR_SIGN = 25
 
 KRB5_AP_REQ = struct.pack('<H', 0x1)
+
+ZEROED_CHANNEL_BINDINGS = "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+
+def calc_channel_binding(certificate_thumbprint):
+    if six.PY3:
+        certificate_digest = bytes.fromhex(certificate_thumbprint)
+    if six.PY2:
+        certificate_digest = certificate_thumbprint.decode('hex')
+    appdata = b'tls-server-end-point:' + certificate_digest
+    cbtstruct = b'\x00' * 4 * 4 + struct.pack('<I', len(appdata)) + appdata
+    md5 = hashlib.md5()
+    md5.update(cbtstruct)
+    return md5.digest()
 
 # 1.1.1. Initial Token - Checksum field
 class CheckSumField(Structure):
